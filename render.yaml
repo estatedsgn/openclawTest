@@ -1,5 +1,5 @@
 services:
-  - type: worker
+  - type: web
     name: tg-random-words-bot
     env: node
     plan: free
@@ -8,4 +8,4 @@ services:
     envVars:
       - key: BOT_TOKEN
         sync: false
-
+    healthCheckPath: /

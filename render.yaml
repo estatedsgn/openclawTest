@@ -1,1 +1,11 @@
+services:
+  - type: worker
+    name: tg-random-words-bot
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
 

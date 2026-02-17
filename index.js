@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { Telegraf } from 'telegraf';
 import http from 'http';
 import fs from 'node:fs/promises';
+import { google } from 'googleapis';
 
 const token = process.env.BOT_TOKEN;
 if (!token) {
@@ -10,6 +11,48 @@ if (!token) {
 }
 
 const bot = new Telegraf(token);
+
+// ----------------------------
+// Google Sheets (processed leads only)
+// ----------------------------
+function getGServiceJson() {
+  const raw = process.env.GSERVICE_JSON;
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    // allow passing raw with escaped newlines
+    return JSON.parse(raw.replace(/\\n/g, '\n'));
+  }
+}
+
+const GSHEET_ID = process.env.GSHEET_ID;
+const GSHEET_TAB = process.env.GSHEET_TAB || 'Sheet1';
+
+async function getSheetsClient() {
+  const creds = getGServiceJson();
+  if (!creds) throw new Error('Missing GSERVICE_JSON');
+  if (!GSHEET_ID) throw new Error('Missing GSHEET_ID');
+
+  const auth = new google.auth.GoogleAuth({
+    credentials: creds,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets']
+  });
+
+  const sheets = google.sheets({ version: 'v4', auth });
+  return sheets;
+}
+
+async function sheetAppendRow(values) {
+  const sheets = await getSheetsClient();
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: GSHEET_ID,
+    range: `${GSHEET_TAB}!A1`,
+    valueInputOption: 'USER_ENTERED',
+    insertDataOption: 'INSERT_ROWS',
+    requestBody: { values: [values] }
+  });
+}
 
 // chatId -> runState
 // runState: { mode: 'words'|'script', timer?, intervalMs?, stepId?, vars?, delayCfg?, awaiting? }
@@ -254,6 +297,17 @@ bot.command('script_show', async (ctx) => {
   await ctx.reply('Скрипт загружен из avito_script.json');
 });
 
+bot.command('sheet_test', async (ctx) => {
+  try {
+    const ts = new Date().toISOString();
+    await sheetAppendRow([ts, 'TEST', 'ok', String(ctx.chat.id), 'test', '']);
+    await ctx.reply('Sheets: OK (строка добавлена).');
+  } catch (e) {
+    console.error('sheet_test failed', e);
+    await ctx.reply(`Sheets: ERROR — ${e?.message || 'unknown'}`);
+  }
+});
+
 // Пример:
 // /test_lead client_name=Анна my_name=Иван my_role=помощник location_type=метро location_value=Павелецкая
 bot.command('test_lead', async (ctx) => {
@@ -317,6 +371,28 @@ bot.on('text', async (ctx) => {
   }
 
   if (step.expect.type === 'free_text') {
+    const tgContact = (incoming || '').trim();
+
+    // Save processed lead to Google Sheets (best-effort)
+    try {
+      if (tgContact) {
+        const ts = new Date().toISOString();
+        const clientName = state.vars?.client_name ?? '';
+        const myName = state.vars?.my_name ?? 'Никита';
+        await sheetAppendRow([
+          ts,
+          clientName,
+          tgContact,
+          String(chatId),
+          'processed',
+          myName
+        ]);
+      }
+    } catch (e) {
+      console.error('sheet append failed', e);
+      // do not block the script
+    }
+
     const nextId = step.expect.next;
     state.stepId = nextId;
     state.awaiting = null;

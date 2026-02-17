@@ -8,6 +8,8 @@
   },
   "dependencies": {
     "dotenv": "^16.4.7",
+    "google-auth-library": "^9.15.1",
+    "googleapis": "^140.0.1",
     "telegraf": "^4.16.3"
   }
 }

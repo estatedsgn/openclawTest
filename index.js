@@ -89,6 +89,13 @@ bot.command('status', async (ctx) => {
 });
 
 bot.launch();
+import http from 'http';
+
+const port = process.env.PORT || 3000;
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('ok');
+}).listen(port, () => console.log(`health server on ${port}`));
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));

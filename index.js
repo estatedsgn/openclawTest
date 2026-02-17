@@ -27,7 +27,7 @@ function getGServiceJson() {
 }
 
 const GSHEET_ID = process.env.GSHEET_ID;
-const GSHEET_TAB = process.env.GSHEET_TAB || 'Sheet1';
+const GSHEET_TAB = process.env.GSHEET_TAB || 'Лист1';
 
 async function getSheetsClient() {
   const creds = getGServiceJson();

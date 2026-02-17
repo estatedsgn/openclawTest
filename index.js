@@ -43,6 +43,27 @@ async function getSheetsClient() {
   return sheets;
 }
 
+const SHEET_HEADERS = ['timestamp', 'client_name', 'tg_contact', 'chat_id', 'status', 'manager'];
+
+async function sheetGetValues(rangeA1) {
+  const sheets = await getSheetsClient();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: GSHEET_ID,
+    range: `${GSHEET_TAB}!${rangeA1}`
+  });
+  return res.data.values || [];
+}
+
+async function sheetUpdateValues(rangeA1, values) {
+  const sheets = await getSheetsClient();
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: GSHEET_ID,
+    range: `${GSHEET_TAB}!${rangeA1}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values }
+  });
+}
+
 async function sheetAppendRow(values) {
   const sheets = await getSheetsClient();
   await sheets.spreadsheets.values.append({
@@ -52,6 +73,40 @@ async function sheetAppendRow(values) {
     insertDataOption: 'INSERT_ROWS',
     requestBody: { values: [values] }
   });
+}
+
+async function sheetEnsureHeader() {
+  const firstRow = await sheetGetValues('A1:F1');
+  const current = firstRow?.[0] || [];
+  const normalized = current.map((x) => String(x || '').trim().toLowerCase());
+  const want = SHEET_HEADERS;
+  const ok = want.every((h, i) => normalized[i] === h);
+  if (!ok) {
+    await sheetUpdateValues('A1:F1', [want]);
+  }
+}
+
+async function sheetFindRowByChatId(chatId) {
+  // Read D column (chat_id) from row 2 downward
+  const col = await sheetGetValues('D2:D');
+  for (let i = 0; i < col.length; i++) {
+    const v = col[i]?.[0];
+    if (String(v || '').trim() === String(chatId)) {
+      return 2 + i; // actual row number
+    }
+  }
+  return null;
+}
+
+async function sheetUpsertProcessedLead({ ts, clientName, tgContact, chatId, status, manager }) {
+  await sheetEnsureHeader();
+  const row = await sheetFindRowByChatId(chatId);
+  const values = [ts, clientName, tgContact, String(chatId), status, manager];
+  if (row) {
+    await sheetUpdateValues(`A${row}:F${row}`, [values]);
+  } else {
+    await sheetAppendRow(values);
+  }
 }
 
 // chatId -> runState
@@ -300,8 +355,15 @@ bot.command('script_show', async (ctx) => {
 bot.command('sheet_test', async (ctx) => {
   try {
     const ts = new Date().toISOString();
-    await sheetAppendRow([ts, 'TEST', 'ok', String(ctx.chat.id), 'test', '']);
-    await ctx.reply('Sheets: OK (строка добавлена).');
+    await sheetUpsertProcessedLead({
+      ts,
+      clientName: 'TEST',
+      tgContact: 'ok',
+      chatId: ctx.chat.id,
+      status: 'test',
+      manager: 'Никита'
+    });
+    await ctx.reply('Sheets: OK (header ensured, upsert done).');
   } catch (e) {
     console.error('sheet_test failed', e);
     await ctx.reply(`Sheets: ERROR — ${e?.message || 'unknown'}`);
@@ -379,14 +441,14 @@ bot.on('text', async (ctx) => {
         const ts = new Date().toISOString();
         const clientName = state.vars?.client_name ?? '';
         const myName = state.vars?.my_name ?? 'Никита';
-        await sheetAppendRow([
+        await sheetUpsertProcessedLead({
           ts,
           clientName,
           tgContact,
-          String(chatId),
-          'processed',
-          myName
-        ]);
+          chatId,
+          status: 'processed',
+          manager: myName
+        });
       }
     } catch (e) {
       console.error('sheet append failed', e);

@@ -187,7 +187,6 @@ function startScriptRun(chatId, ctx, vars, opts = {}) {
     await runStepMessages(chatId, ctx, step, state.vars, state.delayCfg);
     if (step.expect) {
       state.awaiting = step.expect;
-      await ctx.reply('Ожидаю ответ клиента для перехода на следующий шаг.');
     } else {
       await ctx.reply('Готово.');
       stopJob(chatId);
@@ -269,7 +268,7 @@ bot.command('test_lead', async (ctx) => {
 
   // минимальные дефолты, чтобы не стопориться
   vars.client_name = vars.client_name ?? '';
-  vars.my_name = vars.my_name ?? 'Имя';
+  vars.my_name = vars.my_name ?? 'Никита';
   vars.my_role = vars.my_role ?? 'помощник';
   vars.location_type = vars.location_type ?? 'метро';
   vars.location_value = vars.location_value ?? 'не указано';
@@ -310,7 +309,6 @@ bot.on('text', async (ctx) => {
     await runStepMessages(chatId, ctx, next, state.vars, state.delayCfg);
     if (next.expect) {
       state.awaiting = next.expect;
-      await ctx.reply('Ожидаю ответ клиента для перехода.');
     } else {
       await ctx.reply('Готово.');
       stopJob(chatId);
